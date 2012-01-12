@@ -246,9 +246,15 @@ CInstDetails* CWizardInputs::getServerIPMap(const char* compName, const char* bu
     if(m_compOnAllNodes.find(buildSetName) != NotFound)
       return instDetails;
     
-    if(m_ipaddress.ordinality() == 1)
+    if (m_ipaddress.ordinality() + m_supportNodes == 1)
     {
       instDetails = new CInstDetails(compName, m_ipaddress.item(0));
+      m_compIpMap.setValue(buildSetName,instDetails);
+      return instDetails;
+    }
+    else if (m_supportNodes == 1 && strcmp(buildSetName, "roxie") && strcmp(buildSetName, "thor" ))
+    {
+      instDetails = new CInstDetails(compName, m_ipaddressSupport.item(0));
       m_compIpMap.setValue(buildSetName,instDetails);
       return instDetails;
     }
