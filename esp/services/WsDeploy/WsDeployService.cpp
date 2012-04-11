@@ -2418,6 +2418,7 @@ bool CWsDeployFileInfo::getValue(IEspContext &context, IEspGetValueRequest &req,
   const char* pszCategory = pParams->queryProp("category");
   const char* pszBldSet = pParams->queryProp(TAG_BUILDSET);
   const char* pszCompName = pParams->queryProp("compName");
+  const char* pszCompType = pParams->queryProp("compType");
   const char* pszSubType = pParams->queryProp("subType");
   const char* pszSubTypeName = pParams->queryProp("subTypeName");
   const char* pszAttrName = pParams->queryProp("attrName");
@@ -2457,7 +2458,10 @@ bool CWsDeployFileInfo::getValue(IEspContext &context, IEspGetValueRequest &req,
       }
     }
 
-    xpath.clear().append(pszCategory).append("/*");
+    if (!pszCompType)
+      pszCompType = "*";
+
+    xpath.clear().append(pszCategory).append("/").append(pszCompType);
     
     if (pszBldSet)
       xpath.appendf("[@buildSet='%s']", pszBldSet);
