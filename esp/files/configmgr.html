@@ -253,6 +253,30 @@ body {
       text-indent: -4em;
       text-align:justify;
       overflow: hidden;
+      padding: 0em .75em;
+      *margin-left: 4em;   /* IE only */
+      *padding: 0 1.75em;  /* IE only */
+      }
+      
+      .yui-button#moveleft1 button,
+      .yui-button#moveleft2 button {
+      background: url(/esp/files/img/arrow_left.gif) center center no-repeat;
+      width: 2em;
+      text-indent: -4em;
+      text-align:justify;
+      overflow: hidden;
+      padding: 0em .75em;
+      *margin-left: 4em;   /* IE only */
+      *padding: 0 1.75em;  /* IE only */
+      }
+
+      .yui-button#moveright1 button,
+      .yui-button#moveright2 button {
+      background: url(/esp/files/img/arrow_right.gif) center center no-repeat;
+      width: 2em;
+      text-indent: -4em;
+      text-align:justify;
+      overflow: hidden;
       padding: 0 .75em;
       *margin-left: 4em;   /* IE only */
       *padding: 0 1.75em;  /* IE only */
@@ -812,6 +836,68 @@ You need to have Javascript enabled in order to use ConfigMgr. Please enable Jav
   </div>
 </div>
 
+<div id="ThorReconfigPanel" style="display: none; background-color: White;">
+  <div class="bd" style="background-color: White;">
+    <div id="ThorReconfigLayout" style="background-color: White;">
+      <div id="ThorReconfigDTDiv" style="background-color: White; font-size: 0.9em;">
+        <div id="ThorReconfigTopDiv">
+          <table cellpadding="0" border="0" style="border-color:Background" cellspacing="0" height="12px">
+            <tr style="border-color:Background;height:20%;">
+              <td>Choose Master Node: <select id="ThorMasterNode" class="masterNodeslist"></select></td>
+              <td>Slaves per node: <input id="ThorReconfigSlavesPerNode" value="1"/></td>
+            </tr>
+          </table>
+          </div>
+          <div id="ThorReconfigCenterDiv">Configure Slaves by selecting computers (use CTRL OR SHIFT keys to multi select) from Available Computers and pressing move right button.
+          Configure Spares by pressing the Configure Spares Tab, selecting computers from Available Computers and pressing the move right button.
+          Computers can be removed from the Slaves or the Spares table by selecting them and pressing the move left button</div>
+         <div id="ThorReconfigBottomDiv">
+          <div id="ThorReconfigCenterLeftDiv">
+              <div id="NodesDT"></div>
+          </div>
+          <div id="ThorReconfigCenterCenterDiv">
+            <div id="ThorReconfigBtnsDiv" style="position:relative;height:100%;">
+              <span style="position:absolute; top:100;left:10">
+                <input type="button" id='moveright1' class='yui-button moveright1' name='moveright1' title="Move available computers to selected table" />
+              </span>
+              <span style="position:absolute; top:140;left:10">
+                <input type="button" id='moveleft1' class='yui-button moveleft1' name='moveleft1' title="Move computers back to available computers list" />
+              </span>
+            </div>
+          </div>
+          <div id="ThorReconfigCenterRightDiv">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div/>
+
+<div id="ThorReconfigOptionsPanel" style="display: none; background-color: White;">
+  <div class="bd" style="background-color: White;">
+    <div id="ThorReconfigOptionsLayout" style="background-color: White;">
+      <div id="ThorReconfigOptionsCenter" style="background-color: White; font-size: 0.9em;">
+        <div id="AllOldExist" style="display: none; background-color: White;">
+          <span class="groupheader"><u>All machines in old group still exist</u></span>
+          <table cellspacing="2">
+              <tr><td colspan="3"><input type="radio" name="usePrevLayoutForExisting" id="usePrevLayoutForExisting" checked value="UsePrevForExisting"/> Use new layout for new files only, old files will continue to map to previous layout. Node group must be changed to a new name.</td></tr>
+              <tr><td class="cfgindentcol">&nbsp;</td><td class="prompt">Node group name:</td><td><input type="text" name="ThorReconfigNodeGroupName1" id="ThorReconfigNodeGroupName1" /></td></tr>
+              <tr><td colspan="2"><input type="radio" name="usePrevLayoutForExisting" id="useNewLayoutForExisting"  value="useNewLayoutForExisting" /> Force old files to use new layout</td></tr>
+              <tr><td class="cfgindentcol">&nbsp;</td><td colspan="2">WARNING: Forcing the new cluster layout on old files, may result in existing files becoming unreadable. File parts will remain in their old locations.</td></tr>
+          </table>
+        </div>
+        <div id="NotAllOldExist" style="display: none; background-color: White;">
+            <span class="groupheader"><u>Some machines in old group do not exist</u></span>
+            <table cellspacing="2">
+              <tr><td class="cfgindentcol">&nbsp;</td><td colspan="2">WARNING: Some machines in the old cluster definition are no longer part of this environment. Old files referencing this cluster definition, may not be accessible. Node group must be changed to a new name. </td></tr>
+              <tr><td class="cfgindentcol">&nbsp;</td><td class="prompt">Node group name:</td><td><input type="text" name="ThorReconfigNodeGroupName2" id="ThorReconfigNodeGroupName2" /></td></tr>
+            </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div id="selectComputersPanel" style="display: none; background-color: White;">
   <div class="bd" style="background-color: White;">

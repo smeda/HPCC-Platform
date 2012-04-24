@@ -3060,6 +3060,34 @@ function thorInstSelToXML(self, selectedRows, paramdt, type, validateComputers, 
   return xmlStr;
 }
 
+function thorReconfigToXML(masterNode, slaveRows, spareRows, type, validateComputers, skip, slavesPerNode, nodeGroup) {
+  var compName = top.document.navDT.getRecord(top.document.navDT.getSelectedRows()[0]).getData('Name');
+  var xmlStr = "<ThorData type=\"" + type + "\" name=\"" + compName +
+               "\" validateComputers=\"" + validateComputers +
+               "\" nodeGroup=\"" + nodeGroup +
+               "\" slavesPerNode=\"" + slavesPerNode +
+               "\" skipExisting = \"" + skip + "\">";
+
+  xmlStr += "<Computer type='master' name=\"" + masterNode + "\"/>";
+
+  if (typeof (slaveRows) !== 'undefined') {
+    for (var i = 0; i < slaveRows.getLength(); i++) {
+      xmlStr += "<Computer type='slave' name=\"" + slaveRows.getRecord(i).getData('name') + "\"/>";
+    }
+  }
+
+  if (typeof (spareRows) !== 'undefined') {
+    for (var i = 0; i < spareRows.getLength(); i++) {
+      xmlStr += "<Computer type='spare' name=\"" + spareRows.getRecord(i).getData('name') + "\"/>";
+    }
+  }
+
+  xmlStr += "</ThorData>";
+
+  return xmlStr;
+}
+
+
 function promptThorTopology(self, type, slavesPresent, slavesPerNode) {
   var tmpdt = self;
   var handleSubmit = function() {
@@ -3171,11 +3199,139 @@ function promptThorTopology(self, type, slavesPresent, slavesPerNode) {
     },
       getFileName(true) + 'Operation=Add&Type=' + type + '&XmlArgs=' + xmlStr);
   }
-  initSelectComputersPanel(tmpdt, handleSubmit, type==="Slave" ? true : false, slavesPresent, slavesPerNode);
-  document.getElementById('selectComputersPanel').style.display = 'block';
-  tmpdt.selectComputersPanel.render(document.body);
-  tmpdt.selectComputersPanel.center();
-  tmpdt.selectComputersPanel.show();
+  
+  var handleReconfigureSubmit = function(flag) {
+
+    var masterNode = document.getElementById('ThorMasterNode').value;
+    var slavesPerNode = document.getElementById('ThorReconfigSlavesPerNode').value;
+    var slaveRecs = ThorReconfigDTDiv.thorSlavesTable.getRecordSet();
+    var spareRecs = ThorReconfigDTDiv.thorSparesTable.getRecordSet();
+    var oldNodeGroup = '';
+
+    if (slaveRecs.length == 0) {
+      alert("Atleast one slave is required");
+      return;
+    }
+
+    var numslaves = parseInt(document.getElementById("slavesPerNode").value, 10);
+    if (!(isInteger(document.getElementById('slavesPerNode').value)) || numslaves < 1) {
+      alert("Number of thor slaves per node must be a number greater than 0");
+      return;
+    }
+
+    var newNodeGroup = "";
+
+    if (flag)
+      tmpdt.thorReconfigPanel.hide();
+    else
+    {
+      var grpname = 'ThorReconfigNodeGroupName2';
+      if (document.getElementById('AllOldExist').style.display === 'block')
+        grpname = 'ThorReconfigNodeGroupName1';
+
+      if (document.getElementById(grpname))
+      {
+        newNodeGroup = document.getElementById(grpname).value;
+
+        if (oldNodeGroup === newNodeGroup)
+        {
+          alert('The node group name needs to be changed. Please enter a value different than "' + oldNodeGroup + '"');
+          return;
+        }
+      }
+    }
+
+    top.document.startWait();
+    var compName = tmpdt.getRecord(tmpdt.getSelectedRows()[0]).getData('Name');
+    var xmlStr = thorReconfigToXML(masterNode, slaveRecs, spareRecs, "Reconfigure", flag, false, slavesPerNode, newNodeGroup);
+
+    YAHOO.util.Connect.asyncRequest('POST', '/WsDeploy/HandleThorTopology', {
+      success: function(o) {
+        if (o.responseText.indexOf("<html") === 0) {
+          var temp = o.responseText.split(/td align=\"left\">/g);
+          var temp1 = temp[1].split(/<\/td>/g);
+          top.document.stopWait();
+          clearThorReconfigTables();
+          alert(temp1[0]);
+        }
+        else {
+          var form = document.forms['treeForm'];
+          var status = o.responseText.split(/<Status>/g);
+          var status1 = status[1].split(/<\/Status>/g);
+
+          var vals = status1[0].split(/;/g);
+          top.document.stopWait();
+          if (vals[0] === 'true')
+            flag = false;
+
+          if (flag){
+            initThorReconfigOptionsPanel(tmpdt, handleReconfigureSubmit);
+
+            if (vals[0].indexOf('AllOldExist') === 0) {
+              if (document.getElementById('ThorReconfigNodeGroupName1'))
+                document.getElementById('ThorReconfigNodeGroupName1').value = vals[2];
+              oldNodeGroup = vals[1];
+
+              if (vals[0] === 'AllOldExistDifferentSize')
+                document.getElementById('useNewLayoutForExisting').disabled = true;
+              else
+                document.getElementById('useNewLayoutForExisting').disabled = false;
+
+              document.getElementById('AllOldExist').style.display = 'block';
+              document.getElementById('NotAllOldExist').style.display = 'none';
+            }
+            else {
+              if (document.getElementById('ThorReconfigNodeGroupName2'))
+                document.getElementById('ThorReconfigNodeGroupName2').value = vals[2];
+
+              oldNodeGroup = vals[1];
+
+              document.getElementById('NotAllOldExist').style.display = 'block';
+              document.getElementById('AllOldExist').style.display = 'none';
+            }
+
+            document.getElementById('ThorReconfigPanel').style.display = 'none';
+            document.getElementById('ThorReconfigOptionsPanel').style.display = 'block';
+            tmpdt.thorReconfigOptionsPanel.render(document.body);
+            tmpdt.thorReconfigOptionsPanel.center();
+            tmpdt.thorReconfigOptionsPanel.show();
+          }
+          else {
+            tmpdt.thorReconfigOptionsPanel.hide();
+            clearThorReconfigTables();
+            var form = top.window.document.forms['treeForm'];
+            form.isChanged.value = "true";
+            top.document.stopWait();
+            clickCurrentSelOrName(tmpdt);
+          }
+        }
+      },
+      failure: function(o) {
+        top.document.stopWait();
+        clearThorReconfigTables();
+        alert(o.statusText);
+      },
+      scope: this
+    },
+      getFileName(true) + 'Operation=Reconfigure&Type=' + type + '&XmlArgs=' + xmlStr);
+  }
+
+  if (type === "Reconfigure")
+  {
+    initThorReconfigPanel(tmpdt, handleReconfigureSubmit);
+    document.getElementById('ThorReconfigPanel').style.display = 'block';
+    tmpdt.thorReconfigPanel.render(document.body);
+    tmpdt.thorReconfigPanel.center();
+    tmpdt.thorReconfigPanel.show();
+  }
+  else
+  {
+    initSelectComputersPanel(tmpdt, handleSubmit, type==="Slave" ? true : false, slavesPresent, slavesPerNode);
+    document.getElementById('selectComputersPanel').style.display = 'block';
+    tmpdt.selectComputersPanel.render(document.body);
+    tmpdt.selectComputersPanel.center();
+    tmpdt.selectComputersPanel.show();
+  }
 }
 
 function promptYesNoCancel(msg, fnYes, fnNo, fnCancel) {
@@ -3198,10 +3354,8 @@ function promptYesNoCancel(msg, fnYes, fnNo, fnCancel) {
 
   var myButtons = [{ text: "Yes", handler: fnYes, isDefault: true },
                       { text: "No", handler: fnNo }];
-
   if (fnCancel !== null)
     myButtons[myButtons.length] = { text: "Cancel", handler: fnCancel};
-
   tmpdt.YNCancelPanel.cfg.queueProperty("buttons", myButtons);
   document.getElementById('YesNoCancelPanel').style.display = 'block';
   tmpdt.YNCancelPanel.setBody(msg);
@@ -3224,7 +3378,7 @@ function promptValidationErrs(msg) {
       underlay: 'none',
       buttons :[ { text:"Ok", handler:fn, isDefault:true}]
     });
-
+    
     top.document.ValidationErrPanel.renderEvent.subscribe(function(){
      if (!top.document.ValidationErrPanel.layout) {
         top.document.ValidationErrPanel.layout = new YAHOO.widget.Layout('validationErrLayout', {
@@ -4913,4 +5067,337 @@ function onMenuItemSelectUnselect() {
 function trimStr(str)
 {
   return str.replace(/^\s\s*/, '').replace(/\s\s*$/, '');
+}
+
+function displayReconfigureThorWiz(tmpdt, fnSubmit)
+{
+  top.document.startWait();
+    var params = "queryType=multiple::category=Hardware::compType=Computer::attrName=name";
+
+    YAHOO.util.Connect.asyncRequest('POST', '/WsDeploy/GetValue', {
+      success: function(o) {
+        if (o.responseText.indexOf("<?xml") === 0) {
+          var tmp = o.responseText.split(/<ReqValue>/g);
+          var tmp1, computers;
+
+          if (tmp.length > 1) {
+            tmp1 = tmp[1].split(/<\/ReqValue>/g);
+            if (tmp1.length > 1)
+              computers = tmp1[0].split(/,/g);
+            else
+              computers = '';
+
+            var thorMasterDropDown = document.getElementById('ThorMasterNode');
+            var children = thorMasterDropDown.getElementsByTagName("option");
+            for (i = 0; i < children.length; )
+              thorMasterDropDown.removeChild(children.item(i));
+
+            var arr = new Array();
+            for (i = 0; i < computers.length; i++) {
+              thorMasterDropDown.options[thorMasterDropDown.options.length] = new Option(computers[i], computers[i]);
+
+              if (i == 0)
+                thorMasterDropDown.prevValue = computers[i];
+              else
+                arr[arr.length] = {name:computers[i]};
+            }
+
+            thorMasterDropDown.onchange = function() {
+              var flag = updateTableWithMasterNode(ThorReconfigDTDiv.thorComputersTable, 'name', thorMasterDropDown.value);
+
+              if (!flag)
+                flag = updateTableWithMasterNode(ThorReconfigDTDiv.thorSlavesTable, 'name', thorMasterDropDown.value);
+
+              if (!flag)
+                flag = updateTableWithMasterNode(ThorReconfigDTDiv.thorSparesTable, 'name', thorMasterDropDown.value);
+
+              if (flag)
+                ThorReconfigDTDiv.thorComputersTable.addRow({name:thorMasterDropDown.prevValue});
+
+               thorMasterDropDown.prevValue = thorMasterDropDown.value;
+            };
+
+            if (!ThorReconfigDTDiv.thorComputersDataSource) {
+              var thorComputersColumnDefs = [{ key: "name", label: "Available Computers", width: 190 , scrollable: true}];
+              var thorComputersDataSource = new YAHOO.util.DataSource(arr);
+              thorComputersDataSource.responseType = YAHOO.util.DataSource.TYPE_JSARRAY;
+              thorComputersDataSource.responseSchema = { fields: ["name"] };
+              var thorComputersDataTable = new YAHOO.widget.DataTable("NodesDT", thorComputersColumnDefs,
+                                                                    thorComputersDataSource,
+                                                                    { width: "250", initialLoad: false, resize: true});
+
+              var thorSlavesColumnDefs = [{ key: "name", label: "Slaves", width: 315, scrollable: true}];
+              var thorSlavesDataSource = new YAHOO.util.DataSource();
+              thorSlavesDataSource.responseType = YAHOO.util.DataSource.TYPE_JSARRAY;
+              thorSlavesDataSource.responseSchema = { fields: ["name"] };
+
+              var thorSlavesDataTable = new YAHOO.widget.DataTable("slavesDT", thorSlavesColumnDefs,
+                                                                    thorSlavesDataSource,
+                                                                    { width: "150", initialLoad: false, resize: true});
+
+              var thorSparesColumnDefs = [{ key: "name", label: "Spares", width: 315, scrollable: true}];
+              var thorSparesDataSource = new YAHOO.util.DataSource();
+              thorSparesDataSource.responseType = YAHOO.util.DataSource.TYPE_JSARRAY;
+              thorSparesDataSource.responseSchema = { fields: ["name"] };
+
+              var thorSparesDataTable = new YAHOO.widget.DataTable("sparesDT", thorSparesColumnDefs,
+                                                                    thorSparesDataSource,
+                                                                    { width: "250", initialLoad: false, resize: true });
+
+              thorComputersDataTable.subscribe("rowClickEvent", thorComputersDataTable.onEventSelectRow);
+              thorComputersDataTable.subscribe("cellClickEvent", function() { thorComputersDataTable.clearTextSelection() });
+
+              thorSlavesDataTable.subscribe("rowClickEvent", thorSlavesDataTable.onEventSelectRow);
+              thorSlavesDataTable.subscribe("cellClickEvent", function() { thorSlavesDataTable.clearTextSelection() });
+
+              thorSparesDataTable.subscribe("rowClickEvent", thorSparesDataTable.onEventSelectRow);
+              thorSparesDataTable.subscribe("cellClickEvent", function() { thorSparesDataTable.clearTextSelection() });
+
+
+              ThorReconfigDTDiv.thorComputersTable = thorComputersDataTable;
+              ThorReconfigDTDiv.thorComputersDataSource = thorComputersDataSource;
+              ThorReconfigDTDiv.thorSlavesTable = thorSlavesDataTable;
+              ThorReconfigDTDiv.thorSlavesDataSource = thorSlavesDataSource;
+              ThorReconfigDTDiv.thorSparesTable = thorSparesDataTable;
+              ThorReconfigDTDiv.thorSparesDataSource = thorSparesDataSource;
+            }
+
+            ThorReconfigDTDiv.thorComputersDataSource.handleResponse("", arr, { success: ThorReconfigDTDiv.thorComputersTable.onDataReturnInitializeTable,
+              scope: ThorReconfigDTDiv.thorComputersTable
+            }, this, 999);
+
+            top.document.stopWait();
+          }
+        }
+      },
+      failure: function(o) {
+      top.document.stopWait();
+      },
+      scope: this
+     }, getFileName(true) + 'Params=' + params); 
+}
+
+function initThorReconfigPanel(tmpdt, fnSubmit) {
+  //var tmpdt = top.document;
+  if (!tmpdt.thorReconfigPanel) {
+    tmpdt.thorReconfigPanel = new YAHOO.widget.Dialog("ThorReconfigPanel",
+                            { width: "640px",
+                              height: "550px",
+                              resizable: true,
+                              fixedcenter: true,
+                              close: true,
+                              draggable: true,
+                              //zindex:9999,
+                              modal: true,
+                              visible: false,
+                              underlay: 'none',
+                              constraintoviewport: true
+                            }
+                        );
+
+    tmpdt.thorReconfigPanel.renderEvent.subscribe(function() {
+      if (!tmpdt.thorReconfigPanel.layout) {
+        tmpdt.thorReconfigPanel.layout = new YAHOO.widget.Layout('ThorReconfigLayout', {
+        height: (tmpdt.thorReconfigPanel.body.offsetHeight - 20),
+        units: [
+                { position: 'top', header: 'Options', height: 60, body: 'ThorReconfigTopDiv', zindex: 9999 },
+                { position: 'center', header:'Slaves and Spares', body: 'ThorReconfigCenterDiv', resize:false, gutter: '2px', scroll: true},
+                { position: 'bottom', body: 'ThorReconfigBottomDiv', height:300, gutter: '2px', scroll: true},
+            ]
+        });
+
+        tmpdt.thorReconfigPanel.layout.on('render', function() {
+          if (!tmpdt.thorReconfigPanel.innerlayout) {
+            var el = tmpdt.thorReconfigPanel.layout.getUnitByPosition('bottom').get('wrap');
+            tmpdt.thorReconfigPanel.innerlayout = new YAHOO.widget.Layout(el, {
+                parent: tmpdt.thorReconfigPanel.layout,
+                units: [
+                    { position: 'left', body: 'ThorReconfigCenterLeftDiv', width: 200, gutter: '2px' },
+                    { position: 'center', body: 'ThorReconfigCenterCenterDiv', gutter: '2px'},
+                    { position: 'right', body: 'ThorReconfigCenterRightDiv', width: 360, gutter: '2px' },
+                ]
+            });
+
+            tmpdt.thorReconfigPanel.innerlayout.on('render', function() {
+              document.getElementById('ThorReconfigCenterRightDiv').innerHTML = '<div id="ThorReconfigTabView"></div>';
+              YAHOO.util.Event.onAvailable('ThorReconfigTabView', function() { 
+                var ThorReconfigTabView = new YAHOO.widget.TabView("ThorReconfigTabView"); 
+                var nodes = document.getElementById("ThorReconfigTabView").childNodes;
+
+                for (var i = 0; i < nodes.length; i++) {
+                  if (nodes[i].className == "yui-content") {
+                    YAHOO.util.Dom.setStyle(nodes[i], "height", "100%");
+                    YAHOO.util.Dom.setStyle(nodes[i], "position", "relative");
+                    break;
+                  }
+                }
+
+                var newdiv = document.createElement("div");
+                newdiv.id = "slavesDT";
+                var newdiv1 = document.createElement("div");
+                newdiv1.id = "sparesDT";
+                ThorReconfigTabView.addTab( new YAHOO.widget.Tab({label: 'Configure Slaves', contentEl:newdiv, active: true})); 
+                ThorReconfigTabView.addTab( new YAHOO.widget.Tab({label: 'Configure Spares', contentEl:newdiv1})); 
+                tmpdt.thorReconfigPanel.innerlayout.thorReconfigTabView = ThorReconfigTabView;
+              });
+            });
+
+            tmpdt.thorReconfigPanel.innerlayout.render();
+          }
+        });
+
+        YAHOO.util.Event.onContentReady("ThorReconfigBtnsDiv", function() {
+          var oPushButton1 = new YAHOO.widget.Button("moveright1", 
+            { onclick: { fn: function(){
+                var tabView = tmpdt.thorReconfigPanel.innerlayout.thorReconfigTabView;
+                var actTab = tabView.get("activeTab");
+                if (actTab.get("label").indexOf('Slaves')!== -1)
+                  swapRecs(ThorReconfigDTDiv.thorComputersTable, ThorReconfigDTDiv.thorSlavesTable);
+                else
+                  swapRecs(ThorReconfigDTDiv.thorComputersTable, ThorReconfigDTDiv.thorSparesTable);
+              }
+            }});
+          var oPushButton2 = new YAHOO.widget.Button("moveleft1", 
+            { onclick: { fn: function(){
+                var tabView = tmpdt.thorReconfigPanel.innerlayout.thorReconfigTabView;
+                var actTab = tabView.get("activeTab");
+                if (actTab.get("label").indexOf('Slaves')!== -1)
+                  swapRecs(ThorReconfigDTDiv.thorSlavesTable, ThorReconfigDTDiv.thorComputersTable);
+                else
+                  swapRecs(ThorReconfigDTDiv.thorSparesTable, ThorReconfigDTDiv.thorComputersTable);
+              }
+            }
+          });
+        });
+
+        tmpdt.thorReconfigPanel.layout.render();
+      }
+
+      displayReconfigureThorWiz(tmpdt, fnSubmit);
+    });
+
+    tmpdt.thorReconfigPanel.setHeader("Reconfigure Thor Master and Slaves");
+  }
+
+  var resize = new YAHOO.util.Resize('ThorReconfigPanel', {
+    handles: ['br'],
+    autoRatio: true,
+    status: false,
+    minWidth: 640,
+    minHeight: 450
+  });
+
+  resize.on('resize', function(args) {
+     var panelHeight = args.height,
+     padding = 20;
+     //Hack to trick IE into behaving
+     YAHOO.util.Dom.setStyle('thorReconfigLayout', 'display', 'none');
+     this.cfg.setProperty("height", panelHeight + 'px');
+     tmpdt.thorReconfigPanel.layout.set('height', this.body.offsetHeight - padding);
+     tmpdt.thorReconfigPanel.layout.set('width', this.body.offsetWidth - padding);
+     //YAHOO.util.Dom.setStyle('validationErrs', 'height', this.body.offsetHeight - padding - 10);
+     //YAHOO.util.Dom.setStyle('validationErrs', 'width', this.body.offsetWidth - padding);
+     tmpdt.thorReconfigPanel.innerlayout.set('height', this.body.offsetHeight - padding);
+     tmpdt.thorReconfigPanel.innerlayout.set('width', this.body.offsetWidth - padding);
+     tmpdt.thorReconfigPanel.innerlayout.resize();
+     YAHOO.util.Dom.setStyle('thorReconfigLayout', 'display', 'block');
+     tmpdt.thorReconfigPanel.layout.resize(); 
+
+  }, tmpdt.thorReconfigPanel, true);
+
+
+  var fnCancel = function() {
+    clearThorReconfigTables();
+    this.hide();
+  }
+
+  var fnReconfigSubmit = function() {
+    fnSubmit(true);
+  }
+
+  var myButtons = [{ text: "Next", handler: fnReconfigSubmit, isDefault: true },
+                   { text: "Cancel", handler: fnCancel}];
+  tmpdt.thorReconfigPanel.cfg.queueProperty("buttons", myButtons);
+}
+
+function swapRecs(dt1, dt2){
+  var curSel = dt1.getSelectedRows();
+  for (i = 0; i < curSel.length; i++) {
+      var rec = dt1.getRecord(curSel[i]);
+      var data = rec.getData();
+      dt2.addRow(data);
+      dt1.deleteRows(dt1.getTrEl(rec));
+  }
+}
+
+function updateTableWithMasterNode(dt1, col, value){
+  var recSet = dt1.getRecordSet();
+  var recSetLen = recSet.getLength();
+  for (var i = 0; i < recSetLen; i++) {
+      var rec = dt1.getRecord(i);
+      if (rec.getData(col) === value) {
+        dt1.deleteRows(dt1.getTrEl(rec));
+        return true;
+      }
+  }
+
+  return false;
+}
+
+function initThorReconfigOptionsPanel(tmpdt, fnSubmit) {
+  //var tmpdt = top.document;
+  if (!tmpdt.thorReconfigOptionsPanel) {
+    tmpdt.thorReconfigOptionsPanel = new YAHOO.widget.Dialog("ThorReconfigOptionsPanel",
+                            { width: "640px",
+                              height: "280px",
+                              resizable: true,
+                              fixedcenter: true,
+                              close: true,
+                              draggable: true,
+                              //zindex:9999,
+                              modal: true,
+                              visible: false,
+                              underlay: 'none',
+                              constraintoviewport: true
+                            }
+                        );
+
+    tmpdt.thorReconfigOptionsPanel.renderEvent.subscribe(function() {
+      if (!tmpdt.thorReconfigOptionsPanel.layout) {
+        tmpdt.thorReconfigOptionsPanel.layout = new YAHOO.widget.Layout('ThorReconfigOptionsLayout', {
+        height: (tmpdt.thorReconfigOptionsPanel.body.offsetHeight - 20),
+        units: [
+                { position: 'center', header:'Thor Data File Options', body: 'ThorReconfigOptionsCenter', resize:false, gutter: '2px', scroll: true},
+            ]
+        });
+
+        tmpdt.thorReconfigOptionsPanel.layout.render();
+      }
+
+      //displayReconfigureThorWiz();
+    });
+
+    tmpdt.thorReconfigOptionsPanel.setHeader("Configure Thor Data File Options");
+  }
+
+  var fnCancel = function() {
+    clearThorReconfigTables();
+    this.hide();
+  }
+
+  var fnOptionsSubmit = function() {
+    fnSubmit(false);
+  }
+
+  var myButtons = [{ text: "Ok", handler: fnOptionsSubmit, isDefault: true },
+                   { text: "Cancel", handler: fnCancel}];
+  tmpdt.thorReconfigOptionsPanel.cfg.queueProperty("buttons", myButtons);
+}
+
+function clearThorReconfigTables(){
+  if (ThorReconfigDTDiv.thorSlavesTable)
+    ThorReconfigDTDiv.thorSlavesTable.deleteRows(0, ThorReconfigDTDiv.thorSlavesTable.getRecordSet().getLength());
+
+  if (ThorReconfigDTDiv.thorSparesTable)
+    ThorReconfigDTDiv.thorSparesTable.deleteRows(0, ThorReconfigDTDiv.thorSparesTable.getRecordSet().getLength());
 }

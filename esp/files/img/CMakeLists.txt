@@ -23,6 +23,8 @@ FOREACH( iFILES
     ${CMAKE_CURRENT_SOURCE_DIR}/save.gif
     ${CMAKE_CURRENT_SOURCE_DIR}/cloud.jpg
     ${CMAKE_CURRENT_SOURCE_DIR}/wizard.gif
+    ${CMAKE_CURRENT_SOURCE_DIR}/arrow_left.gif
+    ${CMAKE_CURRENT_SOURCE_DIR}/arrow_right.gif
     ${CMAKE_CURRENT_SOURCE_DIR}/tooltip.jpg
     ${CMAKE_CURRENT_SOURCE_DIR}/hpcc_logo.png
     ${CMAKE_CURRENT_SOURCE_DIR}/favicon.ico

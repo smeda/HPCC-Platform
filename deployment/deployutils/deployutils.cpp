@@ -2678,7 +2678,7 @@ bool checkComponentReferences(const IPropertyTree* pEnv, IPropertyTree* pNode, c
 }
 
 
-const char* getUniqueName(const IPropertyTree* pEnv, StringBuffer& sName, const char* processName, const char* category)
+const char* getUniqueName(const IPropertyTree* pEnv, StringBuffer& sName, const char* processName, const char* category, const char* param)
 {
   //if the name ends in _N (where N is a number) then ignore _N to avoid duplicating
   //number suffix as in _N_M
@@ -2707,13 +2707,13 @@ const char* getUniqueName(const IPropertyTree* pEnv, StringBuffer& sName, const 
   }
 
   StringBuffer xpath;
-  xpath.appendf("./%s/%s[@name='%s']", category, processName, sName.str());
+  xpath.appendf("./%s/%s[@%s='%s']", category, processName, param, sName.str());
   int iIdx = 2;
 
   while (pEnv->queryPropTree(xpath))
   {
     sName.clear().appendf("%s_", sPrefix.str()).append(iIdx);
-    xpath.clear().appendf("./%s/%s[@name='%s']", category, processName, sName.str());
+    xpath.clear().appendf("./%s/%s[@%s='%s']", category, processName, param, sName.str());
     iIdx++;
   }
 

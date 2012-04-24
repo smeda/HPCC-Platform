@@ -118,6 +118,146 @@ bool CConfigEnvHelper::handleThorTopologyOp(const char* cmd, const char* xmlArg,
 
         retVal = true;
     }
+    else if (!strcmp(cmd, "Reconfigure"))
+    {
+      Owned<IPropertyTreeIterator> iterComputers = pParams->getElements("Computer");
+      IPropertyTreePtrArray computersMaster, computersSlaves, computersSpares;
+
+      ForEach (*iterComputers)
+      {
+          IPropertyTree* pComp = &iterComputers->query();
+          const char* pszCompName = pComp->queryProp(XML_ATTR_NAME);
+          const char* pszCompType = pComp->queryProp(XML_ATTR_TYPE);
+          xpath.clear().appendf(XML_TAG_HARDWARE"/"XML_TAG_COMPUTER"/["XML_ATTR_NAME"='%s']", pszCompName);
+          IPropertyTree* pComputer = m_pRoot->queryPropTree(xpath.str());
+
+          if (pComputer)
+          {
+            if (pszCompType && !strcmp(pszCompType, "master"))
+              computersMaster.push_back(pComputer);
+            else if (pszCompType && !strcmp(pszCompType, "slave"))
+              computersSlaves.push_back(pComputer);
+            else if (pszCompType && !strcmp(pszCompType, "spare"))
+              computersSpares.push_back(pComputer);
+          }
+      }
+
+      if (computersMaster.size() != 1)
+        throw MakeStringException(-1, "Thor cannot have more than one master. Please choose one computer only!");
+
+      int numNodes = 1;
+      if (slavesPerNode && *slavesPerNode)
+        numNodes = atoi(slavesPerNode);
+
+      if (numNodes < 1)
+          numNodes = 1;
+
+      bool proceedWithReconf = !checkComps;
+      usageList.clear();
+
+      if (checkComps) 
+      {
+        for (int i = 0; i < (int) computersMaster.size(); i++)
+            CheckTopologyComputerUse(computersMaster[i], pThor, usageList);
+        for (int i = 0; i < (int) computersSlaves.size(); i++)
+            CheckTopologyComputerUse(computersSlaves[i], pThor, usageList);
+        for (int i = 0; i < (int) computersSpares.size(); i++)
+            CheckTopologyComputerUse(computersSpares[i], pThor, usageList);
+
+        int existing = 0;
+
+        Owned<IPropertyTreeIterator> iterSlaves = pThor->getElements(XML_TAG_THORSLAVEPROCESS);
+      
+        ForEach (*iterSlaves)
+          existing++;
+
+        if (usageList.length() > 0)
+        {
+          StringBuffer decodedParams(usageList);
+          decodedParams.replaceString(":", "=");
+
+          Owned<IProperties> pProps = createProperties();
+          pProps->loadProps(decodedParams.str());
+          Owned<IPropertyIterator> iter = pProps->getIterator();
+          int overlappedSlaves = 0;
+          int overlappedSpares = 0;
+
+          ForEach(*iter)
+          {
+            StringBuffer prop, key(iter->getPropKey());
+            pProps->getProp(iter->getPropKey(), prop);
+            
+            if (strstr(prop.str(), XML_TAG_THORSLAVEPROCESS))
+            {
+              overlappedSlaves++;
+            }
+            else if (strstr(prop.str(), XML_TAG_THORSPAREPROCESS))
+              overlappedSpares++;
+          }
+
+          if (overlappedSlaves == existing && existing == computersSlaves.size() && numNodes == pThor->getPropInt("@slavesPerNode", 1))
+            usageList.clear().append("AllOldExistSameSize");
+          else if (existing != computersSlaves.size() && overlappedSlaves == existing || numNodes == pThor->getPropInt("@slavesPerNode", 1))
+            usageList.clear().append("AllOldExistDifferentSize");
+          else
+            usageList.clear().append("NotAllOldExist");
+
+          StringBuffer nodeGroup(pThor->queryProp("@nodeGroup"));
+        
+          if (!nodeGroup.length())
+            nodeGroup.append(pThor->queryProp(XML_ATTR_NAME));
+         
+          usageList.append(";").append(nodeGroup.str()).append(";");
+
+          StringBuffer sb(XML_TAG_THORCLUSTER);
+          sb.appendf("["XML_ATTR_NAME"='%s']", thorName);
+          getUniqueName(m_pRoot, nodeGroup, sb.str(), XML_TAG_SOFTWARE, "nodeGroup");
+          if (!strchr(nodeGroup.str(), '_'))
+            nodeGroup.append("_1");
+          usageList.append(nodeGroup.str()).append(";");
+          sMsg.append(usageList);
+          return false;
+        }
+        else if (usageList.length() == 0)
+          proceedWithReconf = true;
+      }
+      
+      if (proceedWithReconf)
+      {
+        pThor->setPropInt("@slavesPerNode", numNodes);
+
+        const char* nodeGroup = pParams->queryProp("@nodeGroup");
+        if (nodeGroup && *nodeGroup)
+          pThor->setProp("@nodeGroup", nodeGroup);
+
+        pThor->removeTree(pThor->queryPropTree(XML_TAG_THORMASTERPROCESS));
+
+        IPropertyTree* pChild;
+        while ((pChild = pThor->queryPropTree(XML_TAG_THORSLAVEPROCESS"[1]")) != NULL)
+          if (pChild)
+            pThor->removeTree( pChild );
+
+        while ((pChild = pThor->queryPropTree(XML_TAG_THORSPAREPROCESS"[1]")) != NULL)
+          if (pChild)
+            pThor->removeTree( pChild );
+          
+        if (computersMaster.size())
+          retVal = this->AddNewNodes(pThor, XML_TAG_THORMASTERPROCESS, 0, computersMaster, false, skipExisting, usageList);
+      
+        if (computersSlaves.size())
+          retVal = this->AddNewNodes(pThor, XML_TAG_THORSLAVEPROCESS, 0, computersSlaves, false, skipExisting, usageList);
+        
+        if (computersSpares.size())
+          retVal = this->AddNewNodes(pThor, XML_TAG_THORSPAREPROCESS, 0, computersSpares, false, skipExisting, usageList);
+
+        sMsg.append(usageList);
+        RenameThorInstances(pThor);
+        UpdateThorAttributes(pThor);
+
+        retVal = true;
+
+      }
+    }
 
     return retVal;
 }

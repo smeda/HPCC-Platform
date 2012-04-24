@@ -2382,6 +2382,8 @@ function onMenuItemClickThorTopology(p_sType, p_aArgs, p_oValue) {
     type = "Master";
   else if (menuItemName === "Add Spares...")
     type = "Spare";
+  else if (menuItemName === "Reconfigure Cluster")
+    type = "Reconfigure";
   top.document.navDT.promptThorTopology(top.document.navDT, type, slavesPresent, slavesPerNode);
 }
 function onContextMenuBeforeShow(p_sType, p_aArgs) {
@@ -2439,14 +2441,17 @@ function onContextMenuBeforeShow(p_sType, p_aArgs) {
                                { text: "Delete", onclick: { fn: onMenuItemClickTopology} }
                             ],
       "ThorClusterRoot": [
+                               { text: "Reconfigure Cluster", onclick: { fn: onMenuItemClickThorTopology} },
                                { text: "Add Master...", onclick: { fn: onMenuItemClickThorTopology} },
                                { text: "Add Spares...", onclick: { fn: onMenuItemClickThorTopology} }
                             ],
       "ThorClusterMaster": [
+                               { text: "Reconfigure Cluster", onclick: { fn: onMenuItemClickThorTopology} },
                                { text: "Add Slaves...", onclick: { fn: onMenuItemClickThorTopology} },
                                { text: "Add Spares...", onclick: { fn: onMenuItemClickThorTopology} }
                             ],
       "ThorClusterSlave": [
+                               { text: "Reconfigure Cluster", onclick: { fn: onMenuItemClickThorTopology} },
                                { text: "Add Spares...", onclick: { fn: onMenuItemClickThorTopology} }
                             ],
       "ThorClusterDelete": [
@@ -2563,7 +2568,7 @@ function onContextMenuBeforeShow(p_sType, p_aArgs) {
       for (var tIdx = 0; tIdx < recSet.getLength(); tIdx++) {
         var r = recSet.getRecord(tIdx);
         if (r.getData('process') === 'Master') {
-          this.getItem(0).cfg.setProperty("disabled", true);
+          this.getItem(1).cfg.setProperty("disabled", true);
           break;
         }
       }
